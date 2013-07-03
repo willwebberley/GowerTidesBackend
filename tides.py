@@ -3,6 +3,7 @@ import json, urllib2, sqlite3, os, time
 
 app = Flask(__name__)
 API_KEY = os.environ.get('WEATHER_API_KEY')
+MSW_KEY = os.environ.get('MSW_API_KEY')
 
 # Open connection to database
 def connectDB():
@@ -30,12 +31,30 @@ def initDB():
                 icon_url TEXT,
                 description TEXT,
                 precipitation REAL)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS surf (
+                timestamp REAL,
+                local_time REAL,
+                faded_rating REAL,
+                solid_rating REAL,
+                min_surf REAL,
+                abs_min_surf REAL,
+                max_surf REAL,
+                abs_max_surf REAL,
+                swell_height REAL,
+                swell_period REAL,
+                swell_angle REAL,
+                swell_direction TEXT,
+                swell_chart_url TEXT,
+                period_chart_url TEXT,
+                wind_chart_url TEXT,
+                pressure_chart_url TEXT,
+                sst_chart_url TEXT)''')
     con.commit()
 
 # Update the table with new weather data. If last update less than 30 mins ago, exit without making request to API
-def updateDB(con, c):
+def updateWeatherDB(con, c):
     currentTime = time.time()
-    row = c.execute("SELECT timestamp FROM tides").fetchone()
+    row = c.execute("SELECT timestamp FROM tides ORDER BY timestamp DESC").fetchone()
     if not row == None:
         lastUpdate = int(row[0])
         diff = currentTime - lastUpdate
@@ -56,6 +75,29 @@ def updateDB(con, c):
                     weather['weatherIconUrl'][0]['value'], weather['weatherDesc'][0]['value'],
                     weather['precipMM']))
     con.commit()
+
+# Update the table with new surf data. If last update less than 30 mins ago, exit without new request to MSW API.
+def updateSurfDB(con, c):
+    currentTime = time.time()
+    row = c.execute("SELECT timestamp FROM surf ORDER BY timestamp DESC").fetchone()
+    if not row == None:
+        lastUpdate = int(row[0])
+        diff = currentTime - lastUpdate
+        if diff < 1800:
+            return
+    # Last update more than 30 mins ago, so refresh surf:
+    request = "http://magicseaweed.com/api/"+MSW_KEY+"/forecast/?spot_id=32"
+    response = urllib2.urlopen(request).read()
+    jDict = json.loads(response)
+    c.execute("DELETE FROM surf")
+    for surf in jDict:
+        try:
+            c.execute("INSERT INTO surf VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(
+            int(currentTime), int(surf['localTimestamp']), int(surf['fadedRating']), int(surf['solidRating']), float(surf['swell']['minBreakingHeight']), float(surf['swell']['absMinBreakingHeight']), float(surf['swell']['maxBreakingHeight']), float(surf['swell']['absMaxBreakingHeight']), float(surf['swell']['components']['combined']['height']), float(surf['swell']['components']['combined']['period']), float(surf['swell']['components']['combined']['direction']), surf['swell']['components']['combined']['compassDirection'], surf['charts']['swell'], surf['charts']['period'], surf['charts']['wind'], surf['charts']['pressure'], surf['charts']['sst']))
+        except:
+            print surf
+    con.commit()
+            
 
 # Get dict of currently-stored weather
 def getWeather(con, c):
@@ -82,13 +124,47 @@ def getWeather(con, c):
         stuff.append(weather)
     return stuff
 
-# Return the currently stored weather. If this is 'stale', then update this from Weather API first/
+# Get dict of currently-stored surf
+def getSurf(con, c):
+    stuff = []
+    result = c.execute("SELECT * FROM surf").fetchall()
+    for row in result:
+        surf = {}
+        surf['timestamp'] = int(row[0])
+        surf['local_time'] = int(row[1])
+        surf['faded_rating'] = int(row[2])
+        surf['solid_rating'] = int(row[3])
+        surf['min_surf_height'] = float(row[4])
+        surf['abs_min_surf_height'] = float(row[5])
+        surf['max_surf_height'] = float(row[6])
+        surf['abs_max_surf_height'] = float(row[7])
+        surf['swell_height'] = float(row[8])
+        surf['swell_period'] = float(row[9])
+        surf['swell_angle'] = float(row[10])
+        surf['swell_direction'] = row[11]
+        surf['swell_chart'] = row[11].replace("\\","")
+        surf['period_chart'] = row[12].replace("\\","")
+        surf['wind_chart'] = row[13].replace("\\","")
+        surf['pressure_chart'] = row[14].replace("\\","")
+        surf['sst_chart'] = row[15].replace("\\","")
+        stuff.append(surf)
+    return stuff
+
+# Return the currently stored weather. If this is 'stale', then it will update this from Weather API first.
 @app.route('/fetch/')
 def fetch():
     creds = connectDB()
-    updateDB(creds[0], creds[1])
+    updateWeatherDB(creds[0], creds[1])
     weather = getWeather(creds[0], creds[1])
     return json.dumps(weather)
+
+# Return the currently stored surf. If this is 'stale', then it will update this from surf API first.
+@app.route('/fetch/surf')
+def fetch_surf():
+    creds = connectDB()
+    updateSurfDB(creds[0], creds[1])
+    surf = getSurf(creds[0], creds[1])
+    return json.dumps(surf)
 
 initDB()
 # Main code
