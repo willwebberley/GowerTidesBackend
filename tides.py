@@ -1,5 +1,5 @@
 from flask import Flask, url_for, render_template, request, session, escape, redirect
-import json, urllib2, sqlite3, os, time
+import json, urllib2, sqlite3, os, time, datetime
 
 app = Flask(__name__)
 API_KEY = os.environ.get('WEATHER_API_KEY')
@@ -132,6 +132,14 @@ def getSurf(con, c):
         surf = {}
         surf['timestamp'] = int(row[0])
         surf['local_time'] = int(row[1])
+        totalDateString = datetime.datetime.fromtimestamp(surf['local_time']).strftime('%Y-%m-%d %H:%M')
+        dateString = totalDateString.split(" ")[0]
+        timeString = totalDateString.split(" ")[1]
+        surf['year'] = dateString.split("-")[0]
+        surf['month'] = dateString.split("-")[1]
+        surf['day'] = dateString.split("-")[2]      
+        surf['hour'] = timeString.split(":")[0]
+        surf['minute'] = timeString.split(":")[1] 
         surf['faded_rating'] = int(row[2])
         surf['solid_rating'] = int(row[3])
         surf['min_surf_height'] = float(row[4])
@@ -159,7 +167,7 @@ def fetch():
     return json.dumps(weather)
 
 # Return the currently stored surf. If this is 'stale', then it will update this from surf API first.
-@app.route('/fetch/surf')
+@app.route('/fetch/surf/')
 def fetch_surf():
     creds = connectDB()
     updateSurfDB(creds[0], creds[1])
