@@ -150,11 +150,11 @@ def getSurf(con, c):
         surf['swell_period'] = float(row[9])
         surf['swell_angle'] = float(row[10])
         surf['swell_direction'] = row[11]
-        surf['swell_chart'] = row[11].replace("\\","")
-        surf['period_chart'] = row[12].replace("\\","")
-        surf['wind_chart'] = row[13].replace("\\","")
-        surf['pressure_chart'] = row[14].replace("\\","")
-        surf['sst_chart'] = row[15].replace("\\","")
+        surf['swell_chart'] = row[12].replace("\\","")
+        surf['period_chart'] = row[13].replace("\\","")
+        surf['wind_chart'] = row[14].replace("\\","")
+        surf['pressure_chart'] = row[15].replace("\\","")
+        surf['sst_chart'] = row[16].replace("\\","")
         stuff.append(surf)
     return stuff
 
@@ -173,6 +173,23 @@ def fetch_surf():
     updateSurfDB(creds[0], creds[1])
     surf = getSurf(creds[0], creds[1])
     return json.dumps(surf)
+
+# Return current data for both datasets. If either is 'stale', then the stale ones will be refreshed first.
+@app.route('/fetch/both/')
+def fetch_both():
+    creds = connectDB()
+    try:
+        updateWeatherDB(creds[0], creds[1])
+    except:
+        print "Error updating weather"
+    try:
+        updateSurfDB(creds[0],creds[1])
+    except:
+        print "Error updating surf"
+    return_stuff = {}
+    return_stuff['weather'] = getWeather(creds[0], creds[1])
+    return_stuff['surf'] = getSurf(creds[0], creds[1])
+    return json.dumps(return_stuff)
 
 initDB()
 # Main code
