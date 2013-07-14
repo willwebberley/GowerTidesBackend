@@ -32,6 +32,7 @@ def initDB():
                 description TEXT,
                 precipitation REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS surf (
+                location REAL,
                 timestamp REAL,
                 local_time REAL,
                 faded_rating REAL,
@@ -77,23 +78,24 @@ def updateWeatherDB(con, c):
     con.commit()
 
 # Update the table with new surf data. If last update less than 30 mins ago, exit without new request to MSW API.
-def updateSurfDB(con, c):
+def updateSurfDB(con, c, location):
     currentTime = time.time()
-    row = c.execute("SELECT timestamp FROM surf ORDER BY timestamp DESC").fetchone()
+    row = c.execute("SELECT timestamp FROM surf WHERE location="+str(location)+" ORDER BY timestamp DESC").fetchone()
     if not row == None:
         lastUpdate = int(row[0])
         diff = currentTime - lastUpdate
         if diff < 1800:
             return
     # Last update more than 30 mins ago, so refresh surf:
-    request = "http://magicseaweed.com/api/"+MSW_KEY+"/forecast/?spot_id=32"
+    request = "http://magicseaweed.com/api/"+MSW_KEY+"/forecast/?spot_id="+str(location)
+    print request
     response = urllib2.urlopen(request).read()
     jDict = json.loads(response)
-    c.execute("DELETE FROM surf")
+    c.execute("DELETE FROM surf WHERE location="+str(location))
     for surf in jDict:
         try:
-            c.execute("INSERT INTO surf VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(
-            int(currentTime), int(surf['localTimestamp']), int(surf['fadedRating']), int(surf['solidRating']), float(surf['swell']['minBreakingHeight']), float(surf['swell']['absMinBreakingHeight']), float(surf['swell']['maxBreakingHeight']), float(surf['swell']['absMaxBreakingHeight']), float(surf['swell']['components']['combined']['height']), float(surf['swell']['components']['combined']['period']), float(surf['swell']['components']['combined']['direction']), surf['swell']['components']['combined']['compassDirection'], surf['charts']['swell'], surf['charts']['period'], surf['charts']['wind'], surf['charts']['pressure'], surf['charts']['sst']))
+            c.execute("INSERT INTO surf VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(
+            int(location), int(currentTime), int(surf['localTimestamp']), int(surf['fadedRating']), int(surf['solidRating']), float(surf['swell']['minBreakingHeight']), float(surf['swell']['absMinBreakingHeight']), float(surf['swell']['maxBreakingHeight']), float(surf['swell']['absMaxBreakingHeight']), float(surf['swell']['components']['combined']['height']), float(surf['swell']['components']['combined']['period']), float(surf['swell']['components']['combined']['direction']), surf['swell']['components']['combined']['compassDirection'], surf['charts']['swell'], surf['charts']['period'], surf['charts']['wind'], surf['charts']['pressure'], surf['charts']['sst']))
         except:
             print surf
     con.commit()
@@ -130,8 +132,9 @@ def getSurf(con, c):
     result = c.execute("SELECT * FROM surf").fetchall()
     for row in result:
         surf = {}
-        surf['timestamp'] = int(row[0])
-        surf['local_time'] = int(row[1])
+        surf['location'] = int(row[0])
+        surf['timestamp'] = int(row[1])
+        surf['local_time'] = int(row[2])
         totalDateString = datetime.datetime.fromtimestamp(surf['local_time']).strftime('%Y-%m-%d %H:%M')
         dateString = totalDateString.split(" ")[0]
         timeString = totalDateString.split(" ")[1]
@@ -140,21 +143,21 @@ def getSurf(con, c):
         surf['day'] = dateString.split("-")[2]      
         surf['hour'] = timeString.split(":")[0]
         surf['minute'] = timeString.split(":")[1] 
-        surf['faded_rating'] = int(row[2])
-        surf['solid_rating'] = int(row[3])
-        surf['min_surf_height'] = float(row[4])
-        surf['abs_min_surf_height'] = float(row[5])
-        surf['max_surf_height'] = float(row[6])
-        surf['abs_max_surf_height'] = float(row[7])
-        surf['swell_height'] = float(row[8])
-        surf['swell_period'] = float(row[9])
-        surf['swell_angle'] = float(row[10])
-        surf['swell_direction'] = row[11]
-        surf['swell_chart'] = row[12].replace("\\","")
-        surf['period_chart'] = row[13].replace("\\","")
-        surf['wind_chart'] = row[14].replace("\\","")
-        surf['pressure_chart'] = row[15].replace("\\","")
-        surf['sst_chart'] = row[16].replace("\\","")
+        surf['faded_rating'] = int(row[3])
+        surf['solid_rating'] = int(row[4])
+        surf['min_surf_height'] = float(row[5])
+        surf['abs_min_surf_height'] = float(row[6])
+        surf['max_surf_height'] = float(row[7])
+        surf['abs_max_surf_height'] = float(row[8])
+        surf['swell_height'] = float(row[9])
+        surf['swell_period'] = float(row[10])
+        surf['swell_angle'] = float(row[11])
+        surf['swell_direction'] = row[12]
+        surf['swell_chart'] = row[13].replace("\\","")
+        surf['period_chart'] = row[14].replace("\\","")
+        surf['wind_chart'] = row[15].replace("\\","")
+        surf['pressure_chart'] = row[16].replace("\\","")
+        surf['sst_chart'] = row[17].replace("\\","")
         stuff.append(surf)
     return stuff
 
@@ -170,7 +173,8 @@ def fetch():
 @app.route('/fetch/surf/')
 def fetch_surf():
     creds = connectDB()
-    updateSurfDB(creds[0], creds[1])
+    surf_location = request.args['loc']
+    updateSurfDB(creds[0], creds[1], surf_location)
     surf = getSurf(creds[0], creds[1])
     return json.dumps(surf)
 
@@ -178,12 +182,14 @@ def fetch_surf():
 @app.route('/fetch/both/')
 def fetch_both():
     creds = connectDB()
+    surf_location = request.args['loc']
+
     try:
         updateWeatherDB(creds[0], creds[1])
     except:
         print "Error updating weather"
     try:
-        updateSurfDB(creds[0],creds[1])
+        updateSurfDB(creds[0],creds[1], surf_location)
     except:
         print "Error updating surf"
     return_stuff = {}
