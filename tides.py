@@ -5,6 +5,8 @@ app = Flask(__name__)
 API_KEY = os.environ.get('WEATHER_API_KEY')
 MSW_KEY = os.environ.get('MSW_API_KEY')
 
+ALLOWED_LOCATIONS = ['32','1456','3942','31']
+
 # Open connection to database
 def connectDB():
     con = sqlite3.connect("tides.db")
@@ -149,7 +151,7 @@ def getSurf(con, c):
         surf['abs_min_surf_height'] = float(row[6])
         surf['max_surf_height'] = float(row[7])
         surf['abs_max_surf_height'] = float(row[8])
-        surf['swell_height'] = float(row[9])
+        surf['swell_height'] = float(row[10])
         surf['swell_period'] = float(row[10])
         surf['swell_angle'] = float(row[11])
         surf['swell_direction'] = row[12]
@@ -183,15 +185,17 @@ def fetch_surf():
 def fetch_both():
     creds = connectDB()
     surf_location = request.args['loc']
+    if not surf_location in ALLOWED_LOCATIONS:
+        return json.dumps({"error":"Unauthorised","message":"That location is not allowed."})
 
     try:
         updateWeatherDB(creds[0], creds[1])
-    except:
-        print "Error updating weather"
+    except Exception as e:
+        print "Error updating weather: ",e
     try:
         updateSurfDB(creds[0],creds[1], surf_location)
-    except:
-        print "Error updating surf"
+    except Exception as e:
+        print "Error updating surf: ",e
     return_stuff = {}
     return_stuff['weather'] = getWeather(creds[0], creds[1])
     return_stuff['surf'] = getSurf(creds[0], creds[1])
