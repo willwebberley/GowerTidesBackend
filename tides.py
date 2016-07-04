@@ -90,16 +90,15 @@ def updateSurfDB(con, c, location):
             return
     # Last update more than 30 mins ago, so refresh surf:
     request = "http://magicseaweed.com/api/"+MSW_KEY+"/forecast/?spot_id="+str(location)
-    print request
     response = urllib2.urlopen(request).read()
     jDict = json.loads(response)
     c.execute("DELETE FROM surf WHERE location="+str(location))
     for surf in jDict:
         try:
             c.execute("INSERT INTO surf VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(
-            int(location), int(currentTime), int(surf['localTimestamp']), int(surf['fadedRating']), int(surf['solidRating']), float(surf['swell']['minBreakingHeight']), float(surf['swell']['absMinBreakingHeight']), float(surf['swell']['maxBreakingHeight']), float(surf['swell']['absMaxBreakingHeight']), float(surf['swell']['components']['combined']['height']), float(surf['swell']['components']['combined']['period']), float(surf['swell']['components']['combined']['direction']), surf['swell']['components']['combined']['compassDirection'], surf['charts']['swell'], surf['charts']['period'], surf['charts']['wind'], surf['charts']['pressure'], surf['charts']['sst']))
-        except:
-            print surf
+            int(location), int(currentTime), int(surf['localTimestamp']), int(surf['fadedRating']), int(surf['solidRating']), float(surf['swell']['minBreakingHeight']), float(surf['swell']['absMinBreakingHeight']), float(surf['swell']['maxBreakingHeight']), float(surf['swell']['absMaxBreakingHeight']), float(surf['swell']['components']['combined']['height']), float(surf['swell']['components']['combined']['period']), float(surf['swell']['components']['combined']['direction']), surf['swell']['components']['combined']['compassDirection'], surf['charts']['swell'], surf['charts']['period'], surf['charts']['wind'], surf['charts']['pressure'], 'sst_chart'))
+        except Exception as e:
+            print e
     con.commit()
             
 
@@ -151,7 +150,7 @@ def getSurf(con, c):
         surf['abs_min_surf_height'] = float(row[6])
         surf['max_surf_height'] = float(row[7])
         surf['abs_max_surf_height'] = float(row[8])
-        surf['swell_height'] = float(row[10])
+        surf['swell_height'] = float(row[9])
         surf['swell_period'] = float(row[10])
         surf['swell_angle'] = float(row[11])
         surf['swell_direction'] = row[12]
@@ -204,6 +203,4 @@ def fetch_both():
 initDB()
 # Main code
 if __name__ == '__main__':
-    app.debug = True # set to true and server will display any errors to the page
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(port=3032)
